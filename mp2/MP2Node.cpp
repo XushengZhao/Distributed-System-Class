@@ -173,7 +173,7 @@ void MP2Node::clientRead(string key){
 void MP2Node::clientUpdate(string key, string value){
     vector<Node> nodevec = findNodes(key);
     int count = 0;
-    trans_map.insert({ g_transID,transactions(key,value,"create",par->getcurrtime()) });
+    trans_map.insert({ g_transID,transactions(key,value,"update",par->getcurrtime()) });
     for (Node n : nodevec) {
         if (n.nodeAddress == memberNode->addr) {
         	if (ht.count(key)){
@@ -401,10 +401,9 @@ void MP2Node::checkMessages() {
 
 	}
 	//check the queue for timed out transactions
-	while (!myq.empty()){
+	while (!myq.empty() && ( !trans_map.count(myq.front()) || par->getcurrtime() - trans_map.at(myq.front()).time >=15)){
 		int id = myq.front();
-		cout<<"transaction id = "<<id<<endl;
-		if (trans_map.count(id) && par->getcurrtime() - trans_map.at(id).time >=15) logtrans(myq.front(),false);
+		if (trans_map.count(id)) logtrans(myq.front(),false);
 		myq.pop();
 	}
 }
