@@ -14,6 +14,8 @@
 #include "Member.h"
 #include "EmulNet.h"
 #include "Queue.h"
+#include <unordered_map>
+#include <cassert>
 
 /**
  * Macros
@@ -31,7 +33,7 @@
 enum MsgTypes{
     JOINREQ,
     JOINREP,
-    DUMMYLASTMSGTYPE
+    HEARTBEAT,
 };
 
 /**
@@ -55,12 +57,14 @@ private:
 	Params *par;
 	Member *memberNode;
 	char NULLADDR[6];
+	 
 
 public:
 	MP1Node(Member *, Params *, EmulNet *, Log *, Address *);
 	Member * getMemberNode() {
 		return memberNode;
 	}
+	unordered_map<string, int> nodetable;
 	int recvLoop();
 	static int enqueueWrapper(void *env, char *buff, int size);
 	void nodeStart(char *servaddrstr, short serverport);
@@ -69,13 +73,18 @@ public:
 	int finishUpThisNode();
 	void nodeLoop();
 	void checkMessages();
-	bool recvCallBack(void *env, char *data, int size);
+	void recvCallBack(void *env, char *data, int size);
 	void nodeLoopOps();
 	int isNullAddress(Address *addr);
 	Address getJoinAddress();
 	void initMemberListTable(Member *memberNode);
 	void printAddress(Address *addr);
 	virtual ~MP1Node();
+	int gettime();
+	void joinreq(char* data);
+	void updatetables(char* data, int size);
+	void sendML(Address *addr);
+	Address createaddress(int id, short port);
 };
 
 #endif /* _MP1NODE_H_ */
