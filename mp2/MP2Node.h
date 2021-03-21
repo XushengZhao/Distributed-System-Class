@@ -19,6 +19,8 @@
 #include "Message.h"
 #include "Queue.h"
 #include <unordered_map>
+#include <list>
+
 
 /**
  * CLASS NAME: MP2Node
@@ -32,21 +34,15 @@
  */
 
 struct transactions {
-	string key;
-	string value;
-	int transid;
-	string type;
-	int count = 0;
-	int expected;
-	int success = 0;
-	int time;
-	transactions(string k, string v, int e, string t,int time) {
-		key = k;
-		value = v;
-		expected = e;
-		type = t;
-		this->time = time;
-	}
+	string key = "";
+	string value = "";
+	string type ="";
+	int count =0;	
+	int success =0;
+	int time =0;
+	transactions(string k, string v, string t,int time) : 
+	key(k), value(v),type(t),time(time) {}
+	transactions(){};
 };
 class MP2Node {
 private:
@@ -67,7 +63,10 @@ private:
 	// Object of Log
 	Log * log;
 	//store a list of outgoing transactions when the node is acting as a coordinator
-	unordered_map<int, transctions> trans_map;
+	unordered_map<int, transactions> trans_map;
+	//queue to keep track of transactions times
+	queue<int> myq;
+
 public:
 	MP2Node(Member *memberNode, Params *par, EmulNet *emulNet, Log *log, Address *addressOfMember);
 	Member * getMemberNode() {

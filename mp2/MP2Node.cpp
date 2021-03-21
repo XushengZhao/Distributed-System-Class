@@ -20,7 +20,7 @@ MP2Node::MP2Node(Member *memberNode, Params *par, EmulNet * emulNet, Log * log, 
  * Destructor
  */
 MP2Node::~MP2Node() {
-	delete ht	delete memberNode;
+	delete memberNode;
 }
 
 /**
@@ -80,8 +80,9 @@ vector<Node> MP2Node::getMembershipList() {
         memcpy(&addressOfThisMember.addr[4], &port, sizeof(short));
         curMemList.emplace_back(Node(addressOfThisMember));
         //add the curr node to the ring list
-        curMemList.push_back(Node(memberNode->addr));
+        
     }
+    curMemList.push_back(Node(memberNode->addr));
 	return curMemList;
 }
 
@@ -111,17 +112,19 @@ size_t MP2Node::hashFunction(string key) {
  */
 void MP2Node::clientCreate(string key, string value) {
     vector<Node> nodevec = findNodes(key);
-    int count = 0;
-    for (int n : nodevec) {
+    trans_map.insert({ g_transID,transactions(key,value,"create",par->getcurrtime()) });
+    for (Node n : nodevec) {
         if (n.nodeAddress == memberNode->addr) {
             ht.insert({ key,value });
+            trans_map[g_transID].success++;
+            trans_map[g_transID].count++;
+            log->logCreateSuccess(&memberNode->addr, false, g_transID, key, value);
         }
         else {
-            count++;
-            emulnet->ENsend(&memberNode->addr, &n.nodeAddress, Message(g_transID, memberNode->addr, CREATE, key, value, PRIMARY).toString());
+            emulNet->ENsend(&memberNode->addr, &n.nodeAddress, Message(g_transID, memberNode->addr, CREATE, key, value, PRIMARY).toString());
         }
     }
-    transmap.insert({ g_transID,transaction(key,value,count,"create",par->getcurrtime()) });
+    myq.push(g_transID);
     g_transID++;
 }
 
@@ -139,18 +142,22 @@ void MP2Node::clientRead(string key){
 	 * Implement this
 	 */
     vector<Node> nodevec = findNodes(key);
-    int count = 0;
-    string value;
+    trans_map.insert({ g_transID,transactions(key,"","read",par->getcurrtime()) });
     for (Node n : nodevec) {
         if (n.nodeAddress == memberNode->addr) {
-            value = ht[key];
+        	if (ht.count(key)){
+        		trans_map[g_transID].value = ht[key];
+        		trans_map[g_transID].success++;
+        		log->logReadSuccess(&memberNode->addr, false, g_transID, key,trans_map[g_transID].value);
+        	}
+        	else log->logReadFail(&memberNode->addr, false, g_transID, key);
+            trans_map[g_transID].count++;
         }
         else {
-            count++;
-            emulnet->ENsend(&memberNode->addr, &n.nodeAddress, Message(g_transID, memberNode->addr, READ, key).toString());
+            emulNet->ENsend(&memberNode->addr, &n.nodeAddress, Message(g_transID, memberNode->addr, READ, key).toString());
         }
     }
-    transmap.insert({ g_transID,transaction(key,value,count,"read",par->getcurrtime()) });
+    myq.push(g_transID);
     g_transID++;
 }
 
@@ -166,16 +173,24 @@ void MP2Node::clientRead(string key){
 void MP2Node::clientUpdate(string key, string value){
     vector<Node> nodevec = findNodes(key);
     int count = 0;
+    trans_map.insert({ g_transID,transactions(key,value,"create",par->getcurrtime()) });
     for (Node n : nodevec) {
         if (n.nodeAddress == memberNode->addr) {
-            ht[key] = value;
+        	if (ht.count(key)){
+        		ht[key] = value;
+        		trans_map[g_transID].success++;
+        		log->logUpdateSuccess(&memberNode->addr, false, g_transID, key, value);
+        	}
+   			else log->logUpdateFail(&memberNode->addr, false, g_transID, key, value);
+            trans_map[g_transID].count++;
+            
         }
         else {
             count++;
-            emulnet->ENsend(&memberNode->addr, &n.nodeAddress, Message(g_transID, memberNode->addr, UPDATE, key, value, PRIMARY).toString());
+            emulNet->ENsend(&memberNode->addr, &n.nodeAddress, Message(g_transID, memberNode->addr, UPDATE, key, value, PRIMARY).toString());
         }
     }
-    transmap.insert({ g_transID,transaction(key,value,count,"create",par->getcurrtime()) });
+    myq.push(g_transID);
     g_transID++;
 }
 
@@ -191,16 +206,23 @@ void MP2Node::clientUpdate(string key, string value){
 void MP2Node::clientDelete(string key){
     vector<Node> nodevec = findNodes(key);
     int count = 0;
+    trans_map.insert({ g_transID,transactions(key,"","delete",par->getcurrtime()) });
     for (Node n : nodevec) {
         if (n.nodeAddress == memberNode->addr) {
-            ht.erase(key);
+            if (ht.count(key)){
+            	trans_map[g_transID].success++;
+            	ht.erase(key);
+            	log->logDeleteSuccess(&memberNode->addr, false, g_transID, key);
+           	}
+            else log->logDeleteFail(&memberNode->addr, false,g_transID, key);
+            trans_map[g_transID].count++;
         }
         else {
             count++;
-            emulnet->ENsend(&memberNode->addr, &n.nodeAddress, Message(g_transID, memberNode->addr, DELETE, key, value, PRIMARY).toString());
+            emulNet->ENsend(&memberNode->addr, &n.nodeAddress, Message(g_transID, memberNode->addr, DELETE,key).toString());
         }
     }
-    transmap.insert({ g_transID,transaction(key,value,count,"delete",par->getcurrtime()) });
+    myq.push(g_transID);
     g_transID++;
 }
 
@@ -235,7 +257,7 @@ string MP2Node::readKey(string key) {
      */
      // Read key from local hash table and return value
     if (ht.count(key)) {
-        return ht[key];
+        return ht.at(key);
     }
     else return "";
 }
@@ -342,71 +364,77 @@ void MP2Node::checkMessages() {
             else log->logReadFail(&memberNode->addr, false, currmsg.transID, currmsg.key);
             break;
         case(REPLY):
-            trans = !currmsg.value.empty();
-            transmap[currmsg.transID].success = +trans;
-            transmap[currmsg.transID].count++;
-            if (transmap[currmsg.transID].success >= 2 || (transmap[currmsg.transID].success >= 2 && transmap[currmsg.transID].expected < 3)) {
+        	if (!trans_map.count(currmsg.transID)) continue;
+            trans_map[currmsg.transID].success += currmsg.success;
+            trans_map[currmsg.transID].count++;
+            if (trans_map[currmsg.transID].success >=2) {
                 logtrans(currmsg.transID,true);
                 trans_map.erase(currmsg.transID);
 
             }
-            else if (transmap[currmsg.transID].expected == transmap[currmsg.transID].count || par->getcurrtime() - transmap[currmsg.transID].time >= 15) {
+            else if (trans_map[currmsg.transID].count == 3) {
                 logtrans(currmsg.transID, false);
                 trans_map.erase(currmsg.transID);
             }
             continue;
         case (READREPLY):
+        	if (!trans_map.count(currmsg.transID)) continue;
             trans = !currmsg.value.empty();
-            transmap[currmsg.transID].success += trans;
-            if (trans)transmap[currmsg.transID].value = currmsg.value;
-            transmap[currmsg.transID].count++;
-            if (transmap[currmsg.transID].success >= 2 || (transmap[currmsg.transID].success >= 2 && transmap[currmsg.transID].expected <3)) {
-                log->logReadSuccess(&memberNode->addr, true, currmsg.transID, currmsg.key, transmap[currmsg.transID].value);
+            trans_map[currmsg.transID].success += trans;
+            if (trans) trans_map[currmsg.transID].value = currmsg.value;
+            trans_map[currmsg.transID].count++;
+            if (trans_map[currmsg.transID].success >= 2) {
+                logtrans(currmsg.transID, true);
                 trans_map.erase(currmsg.transID);
 
             }
-            else if (transmap[currmsg.transID].expected == transmap[currmsg.transID].count || par->getcurrtime() - transmap[currmsg.transID].time >=15) {
-                log->logReadFail(&memberNode->addr, true, currmsg.transID, currmsg.key);
+            else if (trans_map[currmsg.transID].count == 3) {
+                logtrans(currmsg.transID, false);
                 trans_map.erase(currmsg.transID);
             }
             continue;
         }
+        if (currmsg.type == READREPLY || currmsg.type == REPLY)cout<<"SHOULD NOT REACH HERE"<<endl;
         //send a reply msg
-        if (currmsg.type != READ) emulnet->ENsend(&memberNode->addr, &currmsg.fromAddr, Message(g_transID, memberNode->addr, REPLY, trans));
-        else emulnet->ENsend(&memberNode->addr, &currmsg.fromAddr, Message(g_transID, memberNode->addr, READREPLY, value));
+        if (currmsg.type != READ) emulNet->ENsend(&memberNode->addr, &currmsg.fromAddr, Message(currmsg.transID, memberNode->addr, REPLY, trans).toString());
+        else emulNet->ENsend(&memberNode->addr, &currmsg.fromAddr, Message(currmsg.transID, memberNode->addr, value).toString());
 
 	}
-
-	/*
-	 * This function should also ensure all READ and UPDATE operation
-	 * get QUORUM replies
-	 */
+	//check the queue for timed out transactions
+	while (!myq.empty()){
+		int id = myq.front();
+		cout<<"transaction id = "<<id<<endl;
+		if (trans_map.count(id) && par->getcurrtime() - trans_map.at(id).time >=15) logtrans(myq.front(),false);
+		myq.pop();
+	}
 }
 
 void MP2Node::logtrans(int id, bool success) {
     string type = trans_map[id].type;
     string key = trans_map[id].key;
     string value = trans_map[id].value;
-    switch (type) {
-    case("delete"):
+    if (type == "delete"){
         if (success) log->logDeleteSuccess(&memberNode->addr, true, id, key);
         else log->logDeleteFail(&memberNode->addr, true, id,key);
-        break;
-    case("update"):
+    }
+   	else if (type == "update"){
         if (success) log->logUpdateSuccess(&memberNode->addr, true, id, key,value);
         else log->logUpdateFail(&memberNode->addr, true, id, key,value);
-        break;
-    case ("create"):
+    }
+    else if (type == "create"){
         if (success) log->logCreateSuccess(&memberNode->addr, true, id, key, value);
         else log->logCreateFail(&memberNode->addr, true, id, key, value);
-        break;
-    case("replicate"):
+    }
+    else if (type == "read"){
+        if (success) log->logReadSuccess(&memberNode->addr, true, id, key, value);
+        else log->logReadFail(&memberNode->addr, true, id, key);
+    }
+    else if (type == "replicate"){
         ReplicateKey(key);
-        break;
-    case("deletekey"):
+    }
+    else if (type == "deletekey"){
         if (success) ht.erase(key);
         else ReplicateKey(key);
-        break;
     }
     return;
 }
@@ -491,15 +519,19 @@ void MP2Node::ReplicateKey(string key) {
     for (Node n : nodevec) {
         if (n.nodeAddress == memberNode->addr) in = true;
         else {
-            emulnet->ENsend(&memberNode->addr, &n.nodeAddress,Message(g_transID, memberNode->addr, CREATE, key, ht[key], PRIMARY).toString());
+            emulNet->ENsend(&memberNode->addr, &n.nodeAddress,Message(g_transID, memberNode->addr, CREATE, key, ht[key], PRIMARY).toString());
             count++;
         }
     }
-    if (count > 0) {
-        string type;
-        if (!in) type = "deletekey";
-        else type = "replicate";
-        transmap.insert({ g_transID,transaction(key,"",count,type,par->getcurrtime()) });
-        g_transID++;
+    string type;
+    if (!in) type = "deletekey";
+    else type = "replicate";
+    trans_map.insert({ g_transID,transactions(key,"",type,par->getcurrtime()) });
+    if (in){
+    	trans_map[g_transID].success++;
+    	trans_map[g_transID].count++;
     }
+    myq.push(g_transID);
+    g_transID++;
+    
 }

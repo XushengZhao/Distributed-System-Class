@@ -66,6 +66,7 @@ Application::Application(char *infile) {
 		joinaddr = getjoinaddr();
 		addressOfMemberNode = (Address *) en->ENinit(addressOfMemberNode, par->PORTNUM);
 		mp1[i] = new MP1Node(memberNode, par, en, log, addressOfMemberNode);
+		//cout<<"reaches before mp2 constructor"<<endl;
 		mp2[i] = new MP2Node(memberNode, par, en1, log, addressOfMemberNode);
 		log->LOG(&(mp1[i]->getMemberNode()->addr), "APP");
 		log->LOG(&(mp2[i]->getMemberNode()->addr), "APP MP2");
