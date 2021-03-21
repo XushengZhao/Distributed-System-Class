@@ -13,7 +13,6 @@ MP2Node::MP2Node(Member *memberNode, Params *par, EmulNet * emulNet, Log * log, 
 	this->par = par;
 	this->emulNet = emulNet;
 	this->log = log;
-	ht = new HashTable();
 	this->memberNode->addr = *address;
 }
 
@@ -21,8 +20,7 @@ MP2Node::MP2Node(Member *memberNode, Params *par, EmulNet * emulNet, Log * log, 
  * Destructor
  */
 MP2Node::~MP2Node() {
-	delete ht;
-	delete memberNode;
+	delete ht	delete memberNode;
 }
 
 /**
@@ -39,8 +37,6 @@ void MP2Node::updateRing() {
 	 * Implement this. Parts of it are already implemented
 	 */
 	vector<Node> curMemList;
-	bool change = false;
-
 	/*
 	 *  Step 1. Get the current membership list from Membership Protocol / MP1
 	 */
@@ -76,15 +72,16 @@ void MP2Node::updateRing() {
 vector<Node> MP2Node::getMembershipList() {
 	unsigned int i;
 	vector<Node> curMemList;
-	for ( i = 0 ; i < this->memberNode->memberList.size(); i++ ) {
-		Address addressOfThisMember;
-		int id = this->memberNode->memberList.at(i).getid();
-		short port = this->memberNode->memberList.at(i).getport();
-		memcpy(&addressOfThisMember.addr[0], &id, sizeof(int));
-		memcpy(&addressOfThisMember.addr[4], &port, sizeof(short));
-		curMemList.emplace_back(Node(addressOfThisMember));
-	    //add the curr node to the ring list
+    for (i = 0; i < this->memberNode->memberList.size(); i++) {
+        Address addressOfThisMember;
+        int id = this->memberNode->memberList.at(i).getid();
+        short port = this->memberNode->memberList.at(i).getport();
+        memcpy(&addressOfThisMember.addr[0], &id, sizeof(int));
+        memcpy(&addressOfThisMember.addr[4], &port, sizeof(short));
+        curMemList.emplace_back(Node(addressOfThisMember));
+        //add the curr node to the ring list
         curMemList.push_back(Node(memberNode->addr));
+    }
 	return curMemList;
 }
 
@@ -144,7 +141,7 @@ void MP2Node::clientRead(string key){
     vector<Node> nodevec = findNodes(key);
     int count = 0;
     string value;
-    for (int n : nodevec) {
+    for (Node n : nodevec) {
         if (n.nodeAddress == memberNode->addr) {
             value = ht[key];
         }
@@ -169,7 +166,7 @@ void MP2Node::clientRead(string key){
 void MP2Node::clientUpdate(string key, string value){
     vector<Node> nodevec = findNodes(key);
     int count = 0;
-    for (int n : nodevec) {
+    for (Node n : nodevec) {
         if (n.nodeAddress == memberNode->addr) {
             ht[key] = value;
         }
@@ -194,7 +191,7 @@ void MP2Node::clientUpdate(string key, string value){
 void MP2Node::clientDelete(string key){
     vector<Node> nodevec = findNodes(key);
     int count = 0;
-    for (int n : nodevec) {
+    for (Node n : nodevec) {
         if (n.nodeAddress == memberNode->addr) {
             ht.erase(key);
         }

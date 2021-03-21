@@ -110,7 +110,7 @@ public:
 
 	//new helper functions
 	void ReplicateKey(string key);
-	void logtrans(int id, bool success)
+	void logtrans(int id, bool success);
 
 	~MP2Node();
 };
