@@ -46,10 +46,7 @@ struct transactions {
 };
 class MP2Node {
 private:
-	// Vector holding the next two neighbors in the ring who have my replicas
-	vector<Node> hasMyReplicas;
-	// Vector holding the previous two neighbors in the ring whose replicas I have
-	vector<Node> haveReplicasOf;
+
 	// Ring
 	vector<Node> ring;
 	// Hash Table

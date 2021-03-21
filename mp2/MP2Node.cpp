@@ -53,7 +53,16 @@ void MP2Node::updateRing() {
 	 * Step 3: Run the stabilization protocol IF REQUIRED
 	 */
 	// Run stabilization protocol if the hash table size is greater than zero and if there has been a changed in the ring
-    if (curMemList.size() > 1 && curMemList != ring) {
+	bool change = false;
+	if (curMemList.size() != ring.size()) change = true;
+	else {
+		for (int i =0;i<curMemList.size() && i < ring.size();i++){
+			if(curMemList[i].nodeAddress == ring[i].nodeAddress)continue;
+			change = true;
+			break;
+		}
+	}
+    if (curMemList.size() > 1 && change) {
         ring = curMemList;
         stabilizationProtocol();
     }
@@ -82,7 +91,7 @@ vector<Node> MP2Node::getMembershipList() {
         //add the curr node to the ring list
         
     }
-    curMemList.push_back(Node(memberNode->addr));
+    curMemList.emplace_back(Node(memberNode->addr));
 	return curMemList;
 }
 
@@ -113,8 +122,9 @@ size_t MP2Node::hashFunction(string key) {
 void MP2Node::clientCreate(string key, string value) {
     vector<Node> nodevec = findNodes(key);
     trans_map.insert({ g_transID,transactions(key,value,"create",par->getcurrtime()) });
-    for (Node n : nodevec) {
-        if (n.nodeAddress == memberNode->addr) {
+    for (int i = 0;i< nodevec.size();i++) {
+    	Node n = nodevec[i];
+        if (*n.getAddress() == memberNode->addr) {
             ht.insert({ key,value });
             trans_map[g_transID].success++;
             trans_map[g_transID].count++;
@@ -143,8 +153,9 @@ void MP2Node::clientRead(string key){
 	 */
     vector<Node> nodevec = findNodes(key);
     trans_map.insert({ g_transID,transactions(key,"","read",par->getcurrtime()) });
-    for (Node n : nodevec) {
-        if (n.nodeAddress == memberNode->addr) {
+    for (int i = 0;i< nodevec.size();i++) {
+    	Node n = nodevec[i];
+        if (*n.getAddress() == memberNode->addr) {
         	if (ht.count(key)){
         		trans_map[g_transID].value = ht[key];
         		trans_map[g_transID].success++;
@@ -175,7 +186,7 @@ void MP2Node::clientUpdate(string key, string value){
     int count = 0;
     trans_map.insert({ g_transID,transactions(key,value,"update",par->getcurrtime()) });
     for (Node n : nodevec) {
-        if (n.nodeAddress == memberNode->addr) {
+        if (*n.getAddress() == memberNode->addr) {
         	if (ht.count(key)){
         		ht[key] = value;
         		trans_map[g_transID].success++;
@@ -207,8 +218,9 @@ void MP2Node::clientDelete(string key){
     vector<Node> nodevec = findNodes(key);
     int count = 0;
     trans_map.insert({ g_transID,transactions(key,"","delete",par->getcurrtime()) });
-    for (Node n : nodevec) {
-        if (n.nodeAddress == memberNode->addr) {
+    for (int i = 0;i< nodevec.size();i++) {
+    	Node n = nodevec[i];
+        if (*n.getAddress() == memberNode->addr) {
             if (ht.count(key)){
             	trans_map[g_transID].success++;
             	ht.erase(key);
@@ -515,8 +527,9 @@ void MP2Node::ReplicateKey(string key) {
     vector<Node> nodevec = findNodes(key);
     int count = 0;
     bool in = false;
-    for (Node n : nodevec) {
-        if (n.nodeAddress == memberNode->addr) in = true;
+    for (int i = 0;i< nodevec.size();i++) {
+    	Node n = nodevec[i];
+        if (*n.getAddress() == memberNode->addr) in = true;
         else {
             emulNet->ENsend(&memberNode->addr, &n.nodeAddress,Message(g_transID, memberNode->addr, CREATE, key, ht[key], PRIMARY).toString());
             count++;
